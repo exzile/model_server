@@ -18,7 +18,9 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     env:
-      DLDT_PACKAGE_URL: https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/nightly/2026.3.0.0.dev20260624/openvino_genai_ubuntu24_2026.3.0.0.dev20260624_arm64.tar.gz
+      # OpenVINO GenAI nightly publishes arm64 only for ubuntu22 (no ubuntu24 arm64
+      # package exists), so the ARM image is built on the ubuntu22 base to match.
+      DLDT_PACKAGE_URL: https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/nightly/2026.3.0.0.dev20260624/openvino_genai_ubuntu22_2026.3.0.0.dev20260624_arm64.tar.gz
     steps:
       - name: Confirm native ARM runner
         run: |
@@ -38,7 +40,7 @@ jobs:
           set -o pipefail
           make docker_build \
             TARGETARCH=arm64 \
-            BASE_OS=ubuntu24 \
+            BASE_OS=ubuntu22 \
             OV_USE_BINARY=1 \
             DLDT_PACKAGE_URL="${DLDT_PACKAGE_URL}" \
             MEDIAPIPE_DISABLE=1 \

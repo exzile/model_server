@@ -26,13 +26,13 @@ mkdir -vp /ovms_release/lib/custom_nodes
 # Do not link this tokenizer lib as it has old protobuf sentencepiece symbols the conflict with new protobuf from ovsm
 if [ "$ov_use_binary" == "0" ] ; then cp -v /openvino_tokenizers/build/src/libopenvino_tokenizers.so /ovms_release/lib/ ; fi
 
-find /ovms/bazel-out/k8-*/bin -iname '*.so*' ! -type d ! -name "libgtest.so" ! -name "*params" ! -name "*.hana.*" ! -name "py_generate_pipeline.cpython*" !  -name "lib_node_*" ! -path "*test_python_binding*" ! -name "*libpython*" -exec cp -v {} /ovms_release/lib/ \;
+find /ovms/bazel-out/*/bin -iname '*.so*' ! -type d ! -name "libgtest.so" ! -name "*params" ! -name "*.hana.*" ! -name "py_generate_pipeline.cpython*" !  -name "lib_node_*" ! -path "*test_python_binding*" ! -name "*libpython*" -exec cp -v {} /ovms_release/lib/ \;
 
 # Bundle espeak-ng data files when espeak was enabled in the Bazel build.
 # rules_foreign_cc places the cmake install tree under copy_<rule>/espeak-ng/
 # inside bazel-out. Both the shared library (picked up by the find above)
 # and the espeak-ng-data directory are required at runtime.
-ESPEAK_DATA_SRC=$(find /ovms/bazel-out/k8-*/bin/external/espeak_ng -type d -name 'espeak-ng-data' 2>/dev/null | head -n 1 || true)
+ESPEAK_DATA_SRC=$(find /ovms/bazel-out/*/bin/external/espeak_ng -type d -name 'espeak-ng-data' 2>/dev/null | head -n 1 || true)
 if [ -n "$ESPEAK_DATA_SRC" ] && [ -d "$ESPEAK_DATA_SRC" ] ; then
     mkdir -p /ovms_release/share
     cp -rL "$ESPEAK_DATA_SRC" /ovms_release/share/ ;
@@ -105,7 +105,7 @@ cp /opt/opencv/share/licenses/opencv4/* /ovms/release_files/thirdparty-licenses/
 
 # Bundle eSpeak-ng license text when eSpeak artifacts are included.
 # The source repository is checked out under Bazel external trees.
-ESPEAK_LICENSE_SRC=$(find /ovms/bazel-out/k8-*/bin/external/espeak_ng -type f \
+ESPEAK_LICENSE_SRC=$(find /ovms/bazel-out/*/bin/external/espeak_ng -type f \
 	\( -name 'COPYING*' -o -name 'LICENSE*' \) \
 	2>/dev/null | head -n 1 || true)
 if [ -n "$ESPEAK_LICENSE_SRC" ] && [ -f "$ESPEAK_LICENSE_SRC" ] ; then

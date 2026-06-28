@@ -29,25 +29,37 @@ jobs:
 
       - name: Free up disk space
         run: |
-          # Runs 6/7 lost the runner ~85min in (null step conclusions, no artifact) —
-          # resource exhaustion during the heavy OpenVINO/TF compile+link. Reclaim as
-          # much disk as possible up front.
+          # Runs 6/7 lost the runner ~85min in (OOM); run 9 with 16G swap got to
+          # 141min then died again — disk exhaustion on the small / partition
+          # (the OVMS build + a 16G swapfile on / overwhelm it). Reclaim / and
+          # show the layout so /mnt (the large ephemeral volume) can host docker.
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
                       /opt/hostedtoolcache /usr/share/swift /usr/local/.ghcup \
                       /usr/local/share/powershell /usr/local/share/chromium || true
-          sudo docker image prune -af || true
           sudo apt-get clean || true
-          df -h
+          echo "=== disk layout ==="; df -h; lsblk || true
 
-      - name: Add swap (guard against OOM during link)
+      - name: Move Docker to /mnt (large volume) + add swap there
         run: |
-          # Linking OpenVINO/TF objects can exhaust the 16GB RAM; a large swapfile
-          # keeps the runner alive through peak memory at the cost of speed.
-          sudo fallocate -l 16G /swapfile2 || sudo dd if=/dev/zero of=/swapfile2 bs=1M count=16384
-          sudo chmod 600 /swapfile2
-          sudo mkswap /swapfile2
-          sudo swapon /swapfile2
-          free -h
+          # The build's Docker layers + bazel output are tens of GB and were
+          # filling the small / partition. /mnt is the runner's large ephemeral
+          # disk (~tens of GB free) — relocate Docker's data-root and the swapfile
+          # there so neither competes for / space.
+          TARGET=/mnt
+          [ -d /mnt ] || TARGET=/  # fall back if /mnt is absent
+          echo "Using $TARGET for docker + swap"
+          sudo systemctl stop docker docker.socket || true
+          sudo mkdir -p $TARGET/docker
+          echo "{ \"data-root\": \"$TARGET/docker\" }" | sudo tee /etc/docker/daemon.json
+          sudo rm -rf /var/lib/docker
+          sudo systemctl start docker
+          docker info 2>/dev/null | grep -i "docker root dir" || true
+          # 24G swap on the large volume (RAM is 16G; link peaks need more headroom)
+          sudo fallocate -l 24G $TARGET/swapfile2 || sudo dd if=/dev/zero of=$TARGET/swapfile2 bs=1M count=24576
+          sudo chmod 600 $TARGET/swapfile2
+          sudo mkswap $TARGET/swapfile2
+          sudo swapon $TARGET/swapfile2
+          echo "=== after relocation ==="; df -h; free -h
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,11 +79,9 @@ jobs:
       - name: Build minimal ARM64 image
         run: |
           set -o pipefail
-          # JOBS=4 = the runner's full core count for fastest compile; the 16G
-          # swapfile added above absorbs the peak-RAM spike during linking that
-          # OOM-killed the runner in runs 6/7 (which had no swap).
-          # BUILDX=buildx + DOCKER_CACHE_OPTION wire in the gha layer cache; the
-          # first run populates it, later runs reuse the unchanged early stages.
+          # JOBS=2 to cap peak link memory so this run SURVIVES to a real signal
+          # (run 9 at JOBS=4 died at 141min). Layer caching keeps iterations fast
+          # despite the lower parallelism. Bump back up once the build completes.
           make docker_build \
             TARGETARCH=arm64 \
             BASE_OS=ubuntu22 \
@@ -80,7 +90,7 @@ jobs:
             MEDIAPIPE_DISABLE=1 \
             PYTHON_DISABLE=1 \
             RUN_TESTS=0 \
-            JOBS=4 \
+            JOBS=2 \
             BUILDX=buildx \
             DOCKER_CACHE_OPTION="--cache-from type=gha,scope=arm64 --cache-to type=gha,mode=max,scope=arm64" \
             2>&1 | tee arm64-build.log

@@ -79,13 +79,12 @@ jobs:
       - name: Build minimal ARM64 image
         run: |
           set -o pipefail
-          # Phase 1 (minimal): build ONLY the builder image (Dockerfile --target=build).
-          # `make docker_build` is a meta-target (ovms_builder_image + targz_package +
-          # ovms_release_images); targz_package pulls in the capi-build stage whose
-          # smoke-test fails on ARM's f16 default precision (separate Phase-2 fix).
-          # ovms_builder_image is the proven-green minimal target.
+          # Phase 2 (full image): build the CPU release image (Dockerfile --target=release),
+          # which transitively builds build -> capi-build -> pkg -> release. The capi
+          # smoke-test's f16 exact-compare is fixed (src/main_capi.c tolerance); the GPU
+          # image variant is skipped on ARM (x86-only Intel drivers).
           # JOBS=2 caps peak link memory so the run survives; caching keeps it fast.
-          make ovms_builder_image \
+          make ovms_release_images \
             TARGETARCH=arm64 \
             BASE_OS=ubuntu22 \
             OV_USE_BINARY=1 \

@@ -72,7 +72,9 @@ RUN git clone --recurse-submodules --depth 1 --branch v2.10.16 https://github.co
     patch -d /azure/cpprestsdk/ -p1 < /ovms/third_party/cpprest/rest_sdk_v2.10.16.patch && \
     patch -d /azure/azure-storage-cpp/ -p1 </ovms/third_party/azure/azure_sdk.patch
 
-ARG SDL_OPS="-Wl,-z,relro,-z,now,-z,noexecstack -Wall -Wextra -Wimplicit-fallthrough -fPIE -pie -fstack-protector-strong -fexceptions -fasynchronous-unwind-tables -fcf-protection -fpic -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -Wall -Wno-unknown-pragmas -Wno-error=sign-compare -fno-delete-null-pointer-checks -fwrapv -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -s -D_GLIBCXX_USE_CXX11_ABI=1 -Wuninitialized"
+# Control-flow protection flag: -fcf-protection on x86_64, -mbranch-protection on ARM
+ARG CF_PROTECTION=-fcf-protection
+ARG SDL_OPS="-Wl,-z,relro,-z,now,-z,noexecstack -Wall -Wextra -Wimplicit-fallthrough -fPIE -pie -fstack-protector-strong -fexceptions -fasynchronous-unwind-tables ${CF_PROTECTION} -fpic -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -Wall -Wno-unknown-pragmas -Wno-error=sign-compare -fno-delete-null-pointer-checks -fwrapv -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -s -D_GLIBCXX_USE_CXX11_ABI=1 -Wuninitialized"
 WORKDIR /azure/cpprestsdk/Release/build.release
 RUN cmake .. -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_CXX_FLAGS="${SDL_OPS}" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBoost_USE_STATIC_RUNTIME=ON -DBoost_USE_STATIC_LIBS=ON -DWERROR=OFF -DBUILD_SAMPLES=OFF -DBUILD_TESTS=OFF && make --jobs=$JOBS install
 
@@ -170,7 +172,8 @@ RUN if [ "$TARGETARCH" = "arm64" ] || [ "$TARGETARCH" = "aarch64" ]; then \
 ENV TEST_LOG="/root/.cache/bazel/_bazel_root/bc57d4817a53cab8c785464da57d1983/execroot/ovms/bazel-out/test.log"
 
 ################### BUILD OPENVINO FROM SOURCE - buildarg ov_use_binary=0  ############################
-ARG SDL_OPS="-Wl,-z,relro,-z,now,-z,noexecstack -fPIE -pie -fstack-protector-strong -fexceptions -fasynchronous-unwind-tables -fcf-protection -fpic -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -Wno-unknown-pragmas -Wno-error=sign-compare -fno-delete-null-pointer-checks -fwrapv -fstack-clash-protection -Wformat -Wformat-security -s -D_GLIBCXX_USE_CXX11_ABI=1 -Wuninitialized"
+ARG CF_PROTECTION=-fcf-protection
+ARG SDL_OPS="-Wl,-z,relro,-z,now,-z,noexecstack -fPIE -pie -fstack-protector-strong -fexceptions -fasynchronous-unwind-tables ${CF_PROTECTION} -fpic -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -Wno-unknown-pragmas -Wno-error=sign-compare -fno-delete-null-pointer-checks -fwrapv -fstack-clash-protection -Wformat -Wformat-security -s -D_GLIBCXX_USE_CXX11_ABI=1 -Wuninitialized"
 # hadolint ignore=DL3003
 RUN if [ "$ov_use_binary" == "0" ] ; then true ; else exit 0 ; fi ; git clone https://github.com/$ov_source_org/openvino.git /openvino && cd /openvino && git checkout $ov_source_branch && git submodule update --init --recursive
 WORKDIR /openvino/build

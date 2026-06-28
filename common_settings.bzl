@@ -160,7 +160,6 @@ LINUX_COMMON_STATIC_LIBS_COPTS = [
                     "-Wno-deprecated-declarations",
                     "-Werror",
                     "-Wimplicit-fallthrough",
-                    "-fcf-protection=full",
                     "-Wformat",
                     "-Wformat-security",
                     "-Werror=format-security",
@@ -170,7 +169,12 @@ LINUX_COMMON_STATIC_LIBS_COPTS = [
                     "-Wl,-z,relro,-z,now",
                     "-Wl,-z,nodlopen",
                     "-fstack-protector-strong",
-]
+] + select({
+                    # Control-flow protection: Intel CET (-fcf-protection) is x86-only;
+                    # ARM uses branch-target identification / PAC via -mbranch-protection.
+                    "@platforms//cpu:aarch64": ["-mbranch-protection=standard"],
+                    "//conditions:default": ["-fcf-protection=full"],
+})
 
 WINDOWS_COMMON_STATIC_LIBS_COPTS = [
                         "/guard:cf",

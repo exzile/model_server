@@ -56,10 +56,14 @@ ifeq ($(TARGETARCH),amd64)
   PLATFORM_OPTION =
   # OpenVINO runtime library subdir is intel64 on x86_64
   OV_LIBDIR ?= intel64
+  # Intel CET control-flow protection is x86-only
+  CF_PROTECTION ?= -fcf-protection
 else
   PLATFORM_OPTION = --platform linux/$(TARGETARCH)
   # aarch64 OpenVINO packages place runtime libs under lib/aarch64
   OV_LIBDIR ?= aarch64
+  # ARM equivalent of -fcf-protection
+  CF_PROTECTION ?= -mbranch-protection=standard
 endif
 
 # do not change this; change versions per OS a few lines below (BASE_OS_TAG_*)!
@@ -266,7 +270,8 @@ BUILD_ARGS = --build-arg http_proxy=$(HTTP_PROXY)\
 	--build-arg VERBOSE_LOGS=$(VERBOSE_LOGS)\
 	--build-arg KONFLUX=$(KONFLUX)\
 	--build-arg TARGETARCH=$(TARGETARCH)\
-	--build-arg OV_LIBDIR=$(OV_LIBDIR)
+	--build-arg OV_LIBDIR=$(OV_LIBDIR)\
+	--build-arg CF_PROTECTION=$(CF_PROTECTION)
 
 
 .PHONY: default docker_build \

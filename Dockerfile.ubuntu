@@ -255,8 +255,14 @@ RUN if [ "$ov_use_binary" == "0" ]; then \
 fi
 
 # Add Nvidia dev tool if needed
+# intel-opencl-icd (the Intel GPU OpenCL runtime) is published for x86_64 only;
+# on aarch64 there is no Intel GPU, so install just the generic OpenCL headers.
 RUN apt-get update ; \
-    apt-get install -y --no-install-recommends opencl-clhpp-headers opencl-c-headers intel-opencl-icd && \
+    if [ "$TARGETARCH" = "arm64" ] || [ "$TARGETARCH" = "aarch64" ]; then \
+        apt-get install -y --no-install-recommends opencl-clhpp-headers opencl-c-headers ; \
+    else \
+        apt-get install -y --no-install-recommends opencl-clhpp-headers opencl-c-headers intel-opencl-icd ; \
+    fi && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/* ;
 # hadolint ignore=DL3003
 
@@ -264,7 +270,11 @@ WORKDIR /ovms
 # GPU testing in build img
 COPY ./install_ubuntu_gpu_drivers.sh /tmp/install_gpu_drivers.sh
 ARG INSTALL_DRIVER_VERSION="23.22.26516"
-RUN /tmp/install_gpu_drivers.sh && \
+# The Intel GPU compute-runtime packages are x86_64-only (*_amd64.deb); there is
+# no Intel GPU on aarch64, so skip the GPU driver install for the CPU-only ARM build.
+RUN if [ "$TARGETARCH" != "arm64" ] && [ "$TARGETARCH" != "aarch64" ]; then \
+        /tmp/install_gpu_drivers.sh ; \
+    fi && \
     groupadd --gid 5000 ovms && \
     useradd --home-dir /home/ovms --create-home --uid 5000 --gid 5000 --groups 39,44 --shell /bin/bash --skel /dev/null ovms
 # GPU testing in build img

@@ -1,0 +1,55 @@
+# Experimental: build the minimal OVMS image natively on a GitHub-hosted ARM64
+# runner. Lets us validate the aarch64 build (#2648) without local ARM hardware.
+# Expected to be iterative — early runs surface the next arch-specific failure
+# (curl paths / S3 SDK) that drive plan steps 2-3.
+name: ARM64 build (experimental)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/arm64-docker-build
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 300
+    env:
+      DLDT_PACKAGE_URL: https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/nightly/2026.3.0.0.dev20260624/openvino_genai_ubuntu24_2026.3.0.0.dev20260624_arm64.tar.gz
+    steps:
+      - name: Confirm native ARM runner
+        run: |
+          uname -m
+          docker version --format 'engine {{.Server.Version}} {{.Server.Os}}/{{.Server.Arch}}'
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build minimal ARM64 image
+        run: |
+          set -o pipefail
+          make docker_build \
+            TARGETARCH=arm64 \
+            BASE_OS=ubuntu24 \
+            OV_USE_BINARY=1 \
+            DLDT_PACKAGE_URL="${DLDT_PACKAGE_URL}" \
+            MEDIAPIPE_DISABLE=1 \
+            PYTHON_DISABLE=1 \
+            RUN_TESTS=0 \
+            2>&1 | tee arm64-build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-build-log
+          path: arm64-build.log
+          retention-days: 14

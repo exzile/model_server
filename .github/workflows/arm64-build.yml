@@ -55,8 +55,9 @@ jobs:
       - name: Build minimal ARM64 image
         run: |
           set -o pipefail
-          # JOBS=2 (not the runner's 4 cores) to cap peak RAM during linking, which
-          # is where runs 6/7 appear to have OOM-killed the runner.
+          # JOBS=4 = the runner's full core count for fastest compile; the 16G
+          # swapfile added above absorbs the peak-RAM spike during linking that
+          # OOM-killed the runner in runs 6/7 (which had no swap).
           make docker_build \
             TARGETARCH=arm64 \
             BASE_OS=ubuntu22 \
@@ -65,7 +66,7 @@ jobs:
             MEDIAPIPE_DISABLE=1 \
             PYTHON_DISABLE=1 \
             RUN_TESTS=0 \
-            JOBS=2 \
+            JOBS=4 \
             2>&1 | tee arm64-build.log
 
       - name: Show failure tail

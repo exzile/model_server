@@ -145,14 +145,27 @@ ARG CMAKE_BUILD_TYPE=Release
 ENV HDDL_INSTALL_DIR=/opt/intel/openvino/deployment_tools/inference_engine/external/hddl
 ENV TF_SYSTEM_LIBS="curl"
 
+# Target CPU architecture. Defaults to amd64 to preserve x86_64 behavior; the
+# Makefile passes arm64 (and OV_LIBDIR=aarch64) for experimental ARM builds.
+ARG TARGETARCH=amd64
+# OpenVINO runtime library subdir: intel64 on x86_64, aarch64 on ARM.
+ARG OV_LIBDIR=intel64
+
 # Set up Bazel
 ENV BAZEL_VERSION 6.1.1
 WORKDIR /bazel
-RUN curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -O https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
-    curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -o /bazel/LICENSE.txt https://raw.githubusercontent.com/bazelbuild/bazel/master/LICENSE && \
-    chmod +x bazel-*.sh && \
-    ./bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
-    rm -f /bazel/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh
+# x86_64 uses the self-extracting installer; arm64 ships only a standalone binary.
+RUN if [ "$TARGETARCH" = "arm64" ] || [ "$TARGETARCH" = "aarch64" ]; then \
+        curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -o /usr/local/bin/bazel https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-linux-arm64 && \
+        curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -o /bazel/LICENSE.txt https://raw.githubusercontent.com/bazelbuild/bazel/master/LICENSE && \
+        chmod +x /usr/local/bin/bazel ; \
+    else \
+        curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -O https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
+        curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36" -fSsL -o /bazel/LICENSE.txt https://raw.githubusercontent.com/bazelbuild/bazel/master/LICENSE && \
+        chmod +x bazel-*.sh && \
+        ./bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
+        rm -f /bazel/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh ; \
+    fi
 
 ENV TEST_LOG="/root/.cache/bazel/_bazel_root/bc57d4817a53cab8c785464da57d1983/execroot/ovms/bazel-out/test.log"
 
@@ -175,7 +188,7 @@ RUN if [ "$ov_use_binary" == "0" ] ; then true ; else exit 0 ; fi ; \
     ln -s /usr/local/runtime /opt/intel/openvino && \
     ln -s /openvino/scripts/setupvars/setupvars.sh /opt/intel/openvino/setupvars.sh && \
     ln -s /opt/intel/openvino /opt/intel/openvino_2026
-RUN if [ "$ov_use_binary" == "0" ]; then true ; else exit 0 ; fi ; if ! [[ $debug_bazel_flags == *"py_off"* ]]; then true ; else exit 0 ; fi ; mkdir -p /opt/intel/openvino && cp -r /openvino/bin/intel64/${CMAKE_BUILD_TYPE}/python /opt/intel/openvino/
+RUN if [ "$ov_use_binary" == "0" ]; then true ; else exit 0 ; fi ; if ! [[ $debug_bazel_flags == *"py_off"* ]]; then true ; else exit 0 ; fi ; mkdir -p /opt/intel/openvino && cp -r /openvino/bin/${OV_LIBDIR}/${CMAKE_BUILD_TYPE}/python /opt/intel/openvino/
 RUN if [ "$ov_use_binary" == "0" ]; then true ; else exit 0 ; fi ; if ! [[ $debug_bazel_flags == *"py_off"* ]]; then true ; else exit 0 ; fi ; cp -r /openvino/tools/ovc/* /opt/intel/openvino/python
 
 ################## END OF OPENVINO SOURCE BUILD ######################
@@ -200,7 +213,7 @@ RUN if [ -f /opt/intel/openvino/samples/cpp/build_samples.sh ];  then /opt/intel
 
 # OpenVINO Tokenizers extension
 ENV OpenVINO_DIR=/opt/intel/openvino/runtime/cmake
-ENV OPENVINO_TOKENIZERS_PATH_GENAI=/opt/intel/openvino/runtime/lib/intel64/libopenvino_tokenizers.so
+ENV OPENVINO_TOKENIZERS_PATH_GENAI=/opt/intel/openvino/runtime/lib/${OV_LIBDIR}/libopenvino_tokenizers.so
 
 WORKDIR /openvino_tokenizers/
 ARG ov_tokenizers_branch=master
@@ -219,7 +232,7 @@ RUN if ! [[ $debug_bazel_flags == *"_py_off"* ]]; then \
     fi
 # hadolint ignore=DL3003
 RUN if [ "$ov_use_binary" == "0" ]; then true ; else exit 0 ; fi ; \
-    cd /openvino_tokenizers && cmake -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_CXX_FLAGS=" ${SDL_OPS} " -S ./ -B ./build/ && cmake --build ./build/ --parallel $JOBS && cp /openvino_tokenizers/build/src/lib*.so /opt/intel/openvino/runtime/lib/intel64/ && \
+    cd /openvino_tokenizers && cmake -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_CXX_FLAGS=" ${SDL_OPS} " -S ./ -B ./build/ && cmake --build ./build/ --parallel $JOBS && cp /openvino_tokenizers/build/src/lib*.so /opt/intel/openvino/runtime/lib/${OV_LIBDIR}/ && \
     if ! [[ $debug_bazel_flags == *"_py_off"* ]]; then \
     cp build/python/* /opt/intel/openvino/python/openvino_tokenizers/ ; \
     fi
@@ -230,7 +243,7 @@ WORKDIR /openvino_genai/
 RUN if [ "$ov_use_binary" == "0" ]; then \
     git clone https://github.com/$ov_genai_org/openvino.genai /openvino_genai && cd /openvino_genai && git checkout $ov_genai_branch && git submodule update --init --recursive && \
     cmake -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_CXX_FLAGS=" ${SDL_OPS} " -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DENABLE_SYSTEM_ICU="True" -DBUILD_TOKENIZERS=OFF -DENABLE_SAMPLES=OFF -DENABLE_TOOLS=OFF -DENABLE_TESTS=OFF -DENABLE_XGRAMMAR=ON -S ./ -B ./build/ && \
-    cmake --build ./build/ --parallel $JOBS && cp /openvino_genai/build/openvino_genai/lib*.so* /opt/intel/openvino/runtime/lib/intel64/ && \
+    cmake --build ./build/ --parallel $JOBS && cp /openvino_genai/build/openvino_genai/lib*.so* /opt/intel/openvino/runtime/lib/${OV_LIBDIR}/ && \
     cp -r /openvino_genai/src/cpp/include/* /opt/intel/openvino/runtime/include/ && \
     cp /openvino_genai/build/src/cpp/openvino/genai/version.hpp /opt/intel/openvino/runtime/include/openvino/genai/ && \
     if ! [[ $debug_bazel_flags == *"py_off"* ]]; then \
@@ -261,7 +274,7 @@ COPY src/BUILD /ovms/src/BUILD
 COPY src/python/binding/BUILD /ovms/src/python/binding/BUILD
 COPY src/python/binding/tests/requirements.txt /ovms/src/python/binding/tests/requirements.txt
 
-ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/intel/openvino/runtime/lib/intel64/:/opt/opencv/lib/:/opt/intel/openvino/runtime/3rdparty/tbb/lib
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/intel/openvino/runtime/lib/${OV_LIBDIR}/:/opt/opencv/lib/:/opt/intel/openvino/runtime/3rdparty/tbb/lib
 
 # FROM BASE BUILD
 COPY --from=base_build /opt/opencv /opt/opencv/
@@ -366,8 +379,9 @@ RUN if [ "$FUZZER_BUILD" == "0" ]; then bazel build ${CAPI_FLAGS} --jobs $JOBS /
 COPY MakefileCapi /ovms/
 RUN if [ "$FUZZER_BUILD" == "0" ]; then  CAPI_FLAGS=${CAPI_FLAGS} make -f MakefileCapi cpp && \
                                          CAPI_FLAGS=${CAPI_FLAGS} make -f MakefileCapi c; fi ;
-RUN mkdir -p /ovms_release/lib/ ; find /ovms/bazel-out/k8-*/bin -iname 'libovms_shared.so' -exec cp -v {} /ovms_release/lib/ \; \
-    && find /ovms/bazel-out/k8-*/bin -iname 'libgit2.so' -exec cp -v {} /ovms_release/lib/ \;
+# bazel-out config dir is k8-* on x86_64 and aarch64-* on ARM; glob both.
+RUN mkdir -p /ovms_release/lib/ ; find /ovms/bazel-out/*/bin -iname 'libovms_shared.so' -exec cp -v {} /ovms_release/lib/ \; \
+    && find /ovms/bazel-out/*/bin -iname 'libgit2.so' -exec cp -v {} /ovms_release/lib/ \;
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 

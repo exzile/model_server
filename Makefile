@@ -47,6 +47,21 @@ JOBS ?= $(CORES_TOTAL)
 # Currently supported BASE_OS values are: ubuntu24 ubuntu22 redhat
 BASE_OS ?= ubuntu24
 
+# Target CPU architecture for the docker build. Default amd64 (x86_64) preserves
+# existing behavior exactly. Set TARGETARCH=arm64 for experimental aarch64 builds.
+# When left at the amd64 default, PLATFORM_OPTION is empty so the docker build
+# command line is unchanged from before.
+TARGETARCH ?= amd64
+ifeq ($(TARGETARCH),amd64)
+  PLATFORM_OPTION =
+  # OpenVINO runtime library subdir is intel64 on x86_64
+  OV_LIBDIR ?= intel64
+else
+  PLATFORM_OPTION = --platform linux/$(TARGETARCH)
+  # aarch64 OpenVINO packages place runtime libs under lib/aarch64
+  OV_LIBDIR ?= aarch64
+endif
+
 # do not change this; change versions per OS a few lines below (BASE_OS_TAG_*)!
 BASE_OS_TAG ?= latest
 
@@ -249,7 +264,9 @@ BUILD_ARGS = --build-arg http_proxy=$(HTTP_PROXY)\
 	--build-arg JOBS=$(JOBS)\
 	--build-arg CAPI_FLAGS=$(CAPI_FLAGS)\
 	--build-arg VERBOSE_LOGS=$(VERBOSE_LOGS)\
-	--build-arg KONFLUX=$(KONFLUX)
+	--build-arg KONFLUX=$(KONFLUX)\
+	--build-arg TARGETARCH=$(TARGETARCH)\
+	--build-arg OV_LIBDIR=$(OV_LIBDIR)
 
 
 .PHONY: default docker_build \
@@ -378,13 +395,13 @@ else
 	@touch .workspace/metadata.json
 endif
 	@cat .workspace/metadata.json
-	docker $(BUILDX) build $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		-t $(OVMS_CPP_DOCKER_IMAGE)-build:$(OVMS_CPP_IMAGE_TAG)$(IMAGE_TAG_SUFFIX) \
 		--target=build
 
 targz_package:
-	docker $(BUILDX) build -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		--build-arg BUILD_IMAGE=$(BUILD_IMAGE) \
 		-t $(OVMS_CPP_DOCKER_IMAGE)-pkg:$(OVMS_CPP_IMAGE_TAG) \
@@ -393,7 +410,7 @@ targz_package:
 	ID=$$(docker create $(OVMS_CPP_DOCKER_IMAGE)-pkg:$(OVMS_CPP_IMAGE_TAG)) && \
 	docker cp $$ID:/ovms_pkg/$(OS)/ovms.tar dist/$(OS)/ && \
 	docker rm $$ID
-	docker $(BUILDX) build -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		--build-arg BUILD_IMAGE=$(BUILD_IMAGE) \
 		-t $(OVMS_CPP_DOCKER_IMAGE)-capi:$(OVMS_CPP_IMAGE_TAG) \
@@ -413,11 +430,11 @@ ifeq ($(BASE_OS),redhat)
 else
 	$(eval NPU:=1)
 endif
-	docker $(BUILDX) build $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		-t $(OVMS_CPP_DOCKER_IMAGE):$(OVMS_CPP_IMAGE_TAG)$(IMAGE_TAG_SUFFIX) \
 		--target=release && \
-	docker $(BUILDX) build $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		--build-arg GPU=1 \
 		--build-arg NPU=$(NPU) \
@@ -455,7 +472,7 @@ ifeq ($(BASE_OS),redhat)
 endif
 
 release_image:
-	docker $(BUILDX) build $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		--build-arg BUILD_IMAGE=$(BUILD_IMAGE) \
 		--build-arg GPU=$(GPU) \

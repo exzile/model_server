@@ -29,8 +29,25 @@ jobs:
 
       - name: Free up disk space
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
+          # Runs 6/7 lost the runner ~85min in (null step conclusions, no artifact) —
+          # resource exhaustion during the heavy OpenVINO/TF compile+link. Reclaim as
+          # much disk as possible up front.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /opt/hostedtoolcache /usr/share/swift /usr/local/.ghcup \
+                      /usr/local/share/powershell /usr/local/share/chromium || true
+          sudo docker image prune -af || true
+          sudo apt-get clean || true
           df -h
+
+      - name: Add swap (guard against OOM during link)
+        run: |
+          # Linking OpenVINO/TF objects can exhaust the 16GB RAM; a large swapfile
+          # keeps the runner alive through peak memory at the cost of speed.
+          sudo fallocate -l 16G /swapfile2 || sudo dd if=/dev/zero of=/swapfile2 bs=1M count=16384
+          sudo chmod 600 /swapfile2
+          sudo mkswap /swapfile2
+          sudo swapon /swapfile2
+          free -h
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,6 +55,8 @@ jobs:
       - name: Build minimal ARM64 image
         run: |
           set -o pipefail
+          # JOBS=2 (not the runner's 4 cores) to cap peak RAM during linking, which
+          # is where runs 6/7 appear to have OOM-killed the runner.
           make docker_build \
             TARGETARCH=arm64 \
             BASE_OS=ubuntu22 \
@@ -46,7 +65,17 @@ jobs:
             MEDIAPIPE_DISABLE=1 \
             PYTHON_DISABLE=1 \
             RUN_TESTS=0 \
+            JOBS=2 \
             2>&1 | tee arm64-build.log
+
+      - name: Show failure tail
+        if: failure()
+        run: |
+          echo "===== last 200 lines of arm64-build.log ====="
+          tail -n 200 arm64-build.log || true
+          echo "===== disk/mem at failure ====="
+          df -h || true
+          free -h || true
 
       - name: Upload build log
         if: always()

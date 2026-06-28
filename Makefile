@@ -91,6 +91,10 @@ endif
 endif
 FUZZER_BUILD ?= 0
 DOCKER_BUILDKIT ?= 1
+# Optional extra flags for the build-stage `docker buildx build` (e.g. registry/gha
+# layer cache: --cache-from/--cache-to). Empty by default so normal builds are
+# unaffected; the ARM CI sets this together with BUILDX=buildx.
+DOCKER_CACHE_OPTION ?=
 KONFLUX ?= 0
 # NOTE: when changing any value below, you'll need to adjust WORKSPACE file by hand:
 #         - uncomment source build section, comment binary section
@@ -400,7 +404,7 @@ else
 	@touch .workspace/metadata.json
 endif
 	@cat .workspace/metadata.json
-	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) $(DOCKER_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		-t $(OVMS_CPP_DOCKER_IMAGE)-build:$(OVMS_CPP_IMAGE_TAG)$(IMAGE_TAG_SUFFIX) \
 		--target=build

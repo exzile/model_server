@@ -52,12 +52,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Buildx with the docker-container driver is required for the GitHub Actions
+      # layer cache (type=gha). This lets subsequent runs reuse the unchanged early
+      # stages (apt, cpprestsdk, OpenCV, OV download — ~30-40 min) instead of
+      # rebuilding from scratch every iteration.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Exposes ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL so `--cache-to type=gha`
+      # can read/write the Actions cache from a raw `docker buildx build`.
+      - name: Expose GHA cache token
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Build minimal ARM64 image
         run: |
           set -o pipefail
           # JOBS=4 = the runner's full core count for fastest compile; the 16G
           # swapfile added above absorbs the peak-RAM spike during linking that
           # OOM-killed the runner in runs 6/7 (which had no swap).
+          # BUILDX=buildx + DOCKER_CACHE_OPTION wire in the gha layer cache; the
+          # first run populates it, later runs reuse the unchanged early stages.
           make docker_build \
             TARGETARCH=arm64 \
             BASE_OS=ubuntu22 \
@@ -67,6 +81,8 @@ jobs:
             PYTHON_DISABLE=1 \
             RUN_TESTS=0 \
             JOBS=4 \
+            BUILDX=buildx \
+            DOCKER_CACHE_OPTION="--cache-from type=gha,scope=arm64 --cache-to type=gha,mode=max,scope=arm64" \
             2>&1 | tee arm64-build.log
 
       - name: Show failure tail

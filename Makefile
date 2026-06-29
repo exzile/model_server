@@ -439,7 +439,7 @@ ifeq ($(BASE_OS),redhat)
 else
 	$(eval NPU:=1)
 endif
-	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
+	docker $(BUILDX) build $(PLATFORM_OPTION) $(NO_CACHE_OPTION) $(DOCKER_CACHE_OPTION) -f Dockerfile.$(DIST_OS) . \
 		$(BUILD_ARGS) \
 		-t $(OVMS_CPP_DOCKER_IMAGE):$(OVMS_CPP_IMAGE_TAG)$(IMAGE_TAG_SUFFIX) \
 		--target=release

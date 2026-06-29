@@ -94,8 +94,32 @@ jobs:
             RUN_TESTS=0 \
             JOBS=2 \
             BUILDX=buildx \
-            DOCKER_CACHE_OPTION="--cache-from type=gha,scope=arm64 --cache-to type=gha,mode=min,scope=arm64" \
+            DOCKER_CACHE_OPTION="--load --cache-from type=gha,scope=arm64 --cache-to type=gha,mode=min,scope=arm64" \
             2>&1 | tee arm64-build.log
+
+      - name: Smoke test the ARM64 release image
+        run: |
+          set -e
+          IMG=openvino/model_server:latest
+          echo "===== ovms --version (validates packaged binary + rpath libs load) ====="
+          docker run --rm "$IMG" --version
+          echo "===== serve the dummy model and probe REST health ====="
+          docker run -d --name ovms_smoke \
+            -v "$PWD/src/test/dummy:/models/dummy:ro" \
+            -p 8000:8000 "$IMG" \
+            --model_name dummy --model_path /models/dummy --rest_port 8000
+          # poll readiness for up to ~30s
+          ok=0
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/v2/health/ready || true)
+            if [ "$code" = "200" ]; then ok=1; echo "health ready after ${i}s"; break; fi
+            sleep 1
+          done
+          echo "===== ovms server logs ====="
+          docker logs ovms_smoke || true
+          docker rm -f ovms_smoke || true
+          if [ "$ok" != "1" ]; then echo "ARM64 image did not become ready"; exit 1; fi
+          echo "ARM64 release image serves the dummy model successfully."
 
       - name: Show failure tail
         if: failure()

@@ -18,6 +18,9 @@
 set -e
 # Set default value for variables
 : "${FUZZER_BUILD:=0}"
+# OpenVINO names its runtime lib subdir intel64 on x86_64 and aarch64 on ARM.
+OV_LIB_ARCH=intel64
+if [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then OV_LIB_ARCH=aarch64; fi
 env
 mkdir -vp /ovms_release/bin
 mkdir -vp /ovms_release/lib
@@ -96,8 +99,8 @@ if ! [[ $debug_bazel_flags == *"_py_off"* ]]; then mv /ovms_release/lib/python/b
 if  ! [[ $debug_bazel_flags == *"_py_off"* ]]; then	mkdir -p /ovms_release/lib/python/openvino_genai-2026.3.dist-info ; \
 	echo $'Metadata-Version: 1.0\nName: openvino-genai\nVersion: 2026.3\nRequires-Python: >=3.9\nRequires-Dist: openvino-genai~=2026.3.0' > /ovms_release/lib/python/openvino_genai-2026.3.dist-info/METADATA; fi
 
-if [ -f /opt/intel/openvino/runtime/lib/intel64/plugins.xml ]; then cp /opt/intel/openvino/runtime/lib/intel64/plugins.xml /ovms_release/lib/ ; fi
-find /opt/intel/openvino/runtime/lib/intel64/ -iname '*.mvcmd*' -exec cp -vP {} /ovms_release/lib/ \;
+if [ -f /opt/intel/openvino/runtime/lib/${OV_LIB_ARCH}/plugins.xml ]; then cp /opt/intel/openvino/runtime/lib/${OV_LIB_ARCH}/plugins.xml /ovms_release/lib/ ; fi
+find /opt/intel/openvino/runtime/lib/${OV_LIB_ARCH}/ -iname '*.mvcmd*' -exec cp -vP {} /ovms_release/lib/ \;
 if [ -d /opt/intel/openvino/runtime/3rdparty ] ; then find /opt/intel/openvino/runtime/3rdparty/ -iname '*libtbb.so*' -exec cp -vP {} /ovms_release/lib/ \;; fi
 if [[ $debug_bazel_flags == *"--copt=-g -c dbg"* ]]; then find /opt/intel/openvino/runtime/3rdparty/ -iname '*libtbb_debug*' -exec cp -vP {} /ovms_release/lib/ \;; fi
 find /opt/opencv/lib/ -iname '*.so*' -exec cp -vP {} /ovms_release/lib/ \;
@@ -123,7 +126,7 @@ if [ "$FUZZER_BUILD" == "0" ]; then patchelf --remove-rpath ./ovms && patchelf -
 find /ovms_release/lib/ -iname '*.so*' -exec patchelf --debug --remove-rpath  {}  \;
 find /ovms_release/lib/ -iname '*.so*' -exec patchelf --debug --set-rpath '$ORIGIN/../lib' {} \;
 
-find /opt/intel/openvino/runtime/lib/intel64/ -iname '*.so*' -exec cp -vP {} /ovms_release/lib/ \;
+find /opt/intel/openvino/runtime/lib/${OV_LIB_ARCH}/ -iname '*.so*' -exec cp -vP {} /ovms_release/lib/ \;
 patchelf --debug --set-rpath '$ORIGIN' /ovms_release/lib/libopenvino.so
 patchelf --debug --set-rpath '$ORIGIN' /ovms_release/lib/libopenvino_tokenizers.so
 patchelf --debug --set-rpath '$ORIGIN' /ovms_release/lib/lib*plugin.so

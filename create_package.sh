@@ -113,7 +113,9 @@ if [ -n "$ESPEAK_LICENSE_SRC" ] && [ -f "$ESPEAK_LICENSE_SRC" ] ; then
 fi
 
 if [ "$BASE_OS" == "redhat" ] ; then cp -P /usr/lib64/libOpenCL.so* /ovms_release/lib/ ; fi
-if [[ "$BASE_OS" =~ "ubuntu" ]] ; then cp -P /usr/lib/x86_64-linux-gnu/libOpenCL.so* /ovms_release/lib/ ; fi
+# Use the running architecture's multiarch dir (x86_64-linux-gnu / aarch64-linux-gnu).
+# OpenCL is only needed for GPU; on CPU-only aarch64 it may be absent, so tolerate it.
+if [[ "$BASE_OS" =~ "ubuntu" ]] ; then cp -P /usr/lib/"$(uname -m)"-linux-gnu/libOpenCL.so* /ovms_release/lib/ 2>/dev/null || true ; fi
 
 if [ "$FUZZER_BUILD" == "0" ]; then find /ovms/bazel-bin/src -name 'ovms' -type f -exec cp -v {} /ovms_release/bin \; ; fi;
 cd /ovms_release/bin

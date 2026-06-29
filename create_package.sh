@@ -128,7 +128,9 @@ find /ovms_release/lib/ -iname '*.so*' -exec patchelf --debug --set-rpath '$ORIG
 
 find /opt/intel/openvino/runtime/lib/${OV_LIB_ARCH}/ -iname '*.so*' -exec cp -vP {} /ovms_release/lib/ \;
 patchelf --debug --set-rpath '$ORIGIN' /ovms_release/lib/libopenvino.so
-patchelf --debug --set-rpath '$ORIGIN' /ovms_release/lib/libopenvino_tokenizers.so
+# libopenvino_tokenizers.so is not shipped in the aarch64 OpenVINO GenAI package,
+# so only patch it when present (it is always present on x86_64).
+if [ -e /ovms_release/lib/libopenvino_tokenizers.so ]; then patchelf --debug --set-rpath '$ORIGIN' /ovms_release/lib/libopenvino_tokenizers.so ; fi
 patchelf --debug --set-rpath '$ORIGIN' /ovms_release/lib/lib*plugin.so
 if [ -e /ovms_release/lib/libopenvino_genai_c.so ]; then rm -rf /ovms_release/lib/libopenvino_genai_c.so* ; fi
 
